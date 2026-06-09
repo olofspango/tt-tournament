@@ -7,6 +7,7 @@ function createWebSocket() {
     socket.addEventListener('message', () => {
         if (pageType === 'dashboard') {
             loadStandings();
+            loadDashboardCurrentGame();
         } else if (pageType === 'admin') {
             loadAdmin();
         } else if (pageType === 'live-score') {
@@ -30,6 +31,39 @@ async function loadStandings() {
     renderPool('B', data.pools.B || []);
     renderSemifinals(data.semifinals || []);
     renderFinal(data.final);
+}
+
+async function loadDashboardCurrentGame() {
+    const response = await fetch('/api/current-game');
+    if (!response.ok) {
+        return;
+    }
+    const data = await response.json();
+    renderDashboardCurrentGame(data.match);
+}
+
+function renderDashboardCurrentGame(match) {
+    const container = document.getElementById('dashboard-current-match');
+    if (!container) return;
+    if (!match) {
+        container.innerHTML = '<div class="hero-match-empty">No active match selected yet.</div>';
+        return;
+    }
+    container.innerHTML = `
+      <div class="match-tag">Current live match</div>
+      <div class="match-score-grid">
+        <div class="player-summary">
+          <span class="player-name">${match.player1.name}</span>
+          <strong class="hero-score">${match.score1}</strong>
+        </div>
+        <div class="vs-badge">vs</div>
+        <div class="player-summary">
+          <span class="player-name">${match.player2.name}</span>
+          <strong class="hero-score">${match.score2}</strong>
+        </div>
+      </div>
+      <div class="hero-match-meta">${match.stage.toUpperCase()} ${match.pool ? match.pool + ' ' : ''}${match.round ? 'Round ' + match.round : ''} · ${match.finished ? 'Finished' : 'Live'}</div>
+    `;
 }
 
 function renderPool(poolName, standings) {
@@ -336,6 +370,7 @@ window.addEventListener('DOMContentLoaded', () => {
     createWebSocket();
     if (pageType === 'dashboard') {
         loadStandings();
+        loadDashboardCurrentGame();
     }
     if (pageType === 'admin') {
         loadAdmin();

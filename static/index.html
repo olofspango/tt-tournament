@@ -9,18 +9,43 @@
 </head>
 
 <body data-page="dashboard">
-    <div class="page">
-        <header>
-            <h1>Table Tennis Tournament</h1>
-            <p>Live pool standings, semi-final bracket, and final match.</p>
-            <nav>
-                <a href="/live-score">Live score</a>
-            </nav>
+    <div class="page dashboard-page">
+        <header class="hero-card">
+            <div class="hero-copy">
+                <span class="hero-label">Table Tennis Tracker</span>
+                <h1>Track every match in real time</h1>
+                <p>Follow pool standings, semi-finals, and the final match with a clean court-side view.</p>
+                <div class="hero-actions">
+                    <a class="button button-primary" href="/live-score">View live score</a>
+                    <a class="button button-secondary" href="/admin">Admin tools</a>
+                </div>
+            </div>
+            <div class="hero-match-card" id="dashboard-current-match">
+                <div class="match-tag">Current live match</div>
+                <div class="match-score-grid">
+                    <div class="player-summary">
+                        <span class="player-name" id="hero-player1-name"></span>
+                        <strong class="hero-score" id="hero-player1-score"></strong>
+                    </div>
+                    <div class="vs-badge">vs</div>
+                    <div class="player-summary">
+                        <span class="player-name" id="hero-player2-name"></span>
+                        <strong class="hero-score" id="hero-player2-score"></strong>
+                    </div>
+                </div>
+                <div class="hero-match-meta" id="hero-match-meta"></div>
+            </div>
         </header>
 
         <section class="summary">
-            <div class="card">
-                <h2>Pool A</h2>
+            <div class="card pool-card pool-a-card">
+                <div class="card-header">
+                    <div>
+                        <span class="section-tag">Pool A</span>
+                        <h2>Standings</h2>
+                    </div>
+                    <span class="section-note">Court 1</span>
+                </div>
                 <div class="table-container">
                     <table id="pool-a-table">
                         <thead>
@@ -38,8 +63,14 @@
                     </table>
                 </div>
             </div>
-            <div class="card">
-                <h2>Pool B</h2>
+            <div class="card pool-card pool-b-card">
+                <div class="card-header">
+                    <div>
+                        <span class="section-tag">Pool B</span>
+                        <h2>Standings</h2>
+                    </div>
+                    <span class="section-note">Court 2</span>
+                </div>
                 <div class="table-container">
                     <table id="pool-b-table">
                         <thead>
@@ -59,18 +90,24 @@
             </div>
         </section>
 
-        <section class="card" id="semifinals-section">
-            <h2>Semi-finals</h2>
+        <section class="card bracket-card" id="semifinals-section">
+            <div class="card-header">
+                <h2>Semi-finals</h2>
+                <span class="section-note">Next on the schedule</span>
+            </div>
             <div id="semifinals"></div>
         </section>
 
-        <section class="card" id="final-section">
-            <h2>Final</h2>
+        <section class="card bracket-card" id="final-section">
+            <div class="card-header">
+                <h2>Final</h2>
+                <span class="section-note">Championship match</span>
+            </div>
             <div id="final"></div>
         </section>
 
-        <footer>
-            <p>Standings update automatically whenever scores change.</p>
+        <footer class="page-footer">
+            <p>Standings refresh automatically whenever scores change, so the tournament stays current.</p>
         </footer>
     </div>
     <script src="/static/app.js"></script>
