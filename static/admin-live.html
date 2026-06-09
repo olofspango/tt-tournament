@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Live Score</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body data-page="admin-live">
+    <div class="page">
+        <header>
+            <div>
+                <h1>Live Score Admin</h1>
+                <p>Increment or decrement the current match score in real time.</p>
+            </div>
+            <nav>
+                <a href="/admin">Admin</a>
+                <a href="/">Dashboard</a>
+            </nav>
+        </header>
+
+        <section class="card">
+            <h2>Current Match</h2>
+            <div id="current-match"></div>
+            <div id="current-match-feedback" class="feedback"></div>
+        </section>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+
+</html>

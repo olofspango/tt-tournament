@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Table Tennis Tournament</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body data-page="admin">
+    <div class="page">
+        <header>
+            <h1>Admin Console</h1>
+            <p>Add players and update match scores.</p>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/admin-live">Live score admin</a>
+            </nav>
+        </header>
+
+        <section class="card">
+            <h2>Add Player</h2>
+            <form id="player-form">
+                <input id="player-name" type="text" placeholder="Player name" required />
+                <button type="submit">Add player</button>
+            </form>
+            <div id="player-feedback" class="feedback"></div>
+        </section>
+
+        <section class="card">
+            <h2>Players</h2>
+            <div class="table-container">
+                <table id="players-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Matches</h2>
+            <div class="admin-actions">
+                <button id="save-all-scores">Save all scores</button>
+                <button id="reset-tournament" class="secondary">Reset tournament</button>
+            </div>
+            <div id="match-feedback" class="feedback"></div>
+            <div class="table-container">
+                <table id="matches-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Stage</th>
+                            <th>Pool</th>
+                            <th>Round</th>
+                            <th>Player 1</th>
+                            <th>Score</th>
+                            <th>Player 2</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+
+</html>

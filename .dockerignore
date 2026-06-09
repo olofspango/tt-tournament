@@ -1,0 +1,6 @@
+tt-tracker
+*.db
+*.log
+.git
+**/node_modules
+**/vendor
