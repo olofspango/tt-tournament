@@ -36,6 +36,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Name</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -44,7 +45,8 @@
         </section>
 
         <section class="card">
-            <h2>Matches</h2>
+            <h2>Match Queue</h2>
+            <p class="section-help">Matches are ordered so players rest between games and playtime stays even. Scores normally come from the <a href="/admin-live">live score admin</a>; edit here only for corrections.</p>
             <div class="admin-actions">
                 <button id="save-all-scores">Save all scores</button>
                 <button id="reset-tournament" class="secondary">Reset tournament</button>
@@ -54,13 +56,13 @@
                 <table id="matches-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
+                            <th>#</th>
                             <th>Stage</th>
-                            <th>Pool</th>
-                            <th>Round</th>
                             <th>Player 1</th>
                             <th>Score</th>
                             <th>Player 2</th>
+                            <th>Status</th>
+                            <th>Live</th>
                         </tr>
                     </thead>
                     <tbody></tbody>

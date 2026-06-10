@@ -11,30 +11,64 @@ type Player struct {
 }
 
 type MatchRecord struct {
-	ID        int    `json:"id"`
-	Key       string `json:"key"`
-	Player1ID int    `json:"player1_id"`
-	Player2ID int    `json:"player2_id"`
-	Pool      string `json:"pool"`
-	Stage     string `json:"stage"`
-	Round     int    `json:"round"`
-	Score1    int    `json:"score1"`
-	Score2    int    `json:"score2"`
-	Finished  bool   `json:"finished"`
-	Current   bool   `json:"current"`
+	ID          int    `json:"id"`
+	Key         string `json:"key"`
+	Player1ID   int    `json:"player1_id"`
+	Player2ID   int    `json:"player2_id"`
+	Pool        string `json:"pool"`
+	Stage       string `json:"stage"`
+	Round       int    `json:"round"`
+	Score1      int    `json:"score1"`
+	Score2      int    `json:"score2"`
+	Finished    bool   `json:"finished"`
+	Current     bool   `json:"current"`
+	PlayOrder   int    `json:"play_order"`
+	FirstServer int    `json:"first_server"`
 }
 
 type MatchView struct {
-	ID       int    `json:"id"`
-	Player1  Player `json:"player1"`
-	Player2  Player `json:"player2"`
-	Pool     string `json:"pool"`
-	Stage    string `json:"stage"`
-	Round    int    `json:"round"`
-	Score1   int    `json:"score1"`
-	Score2   int    `json:"score2"`
-	Finished bool   `json:"finished"`
-	Current  bool   `json:"current"`
+	ID          int    `json:"id"`
+	Player1     Player `json:"player1"`
+	Player2     Player `json:"player2"`
+	Pool        string `json:"pool"`
+	Stage       string `json:"stage"`
+	Round       int    `json:"round"`
+	Score1      int    `json:"score1"`
+	Score2      int    `json:"score2"`
+	Finished    bool   `json:"finished"`
+	Current     bool   `json:"current"`
+	PlayOrder   int    `json:"play_order"`
+	FirstServer int    `json:"first_server"`
+}
+
+func (m MatchRecord) toView(players map[int]Player) (MatchView, bool) {
+	p1, ok1 := players[m.Player1ID]
+	p2, ok2 := players[m.Player2ID]
+	if !ok1 || !ok2 {
+		return MatchView{}, false
+	}
+	return MatchView{
+		ID:          m.ID,
+		Player1:     p1,
+		Player2:     p2,
+		Pool:        m.Pool,
+		Stage:       m.Stage,
+		Round:       m.Round,
+		Score1:      m.Score1,
+		Score2:      m.Score2,
+		Finished:    m.Finished,
+		Current:     m.Current,
+		PlayOrder:   m.PlayOrder,
+		FirstServer: m.FirstServer,
+	}, true
+}
+
+func playerMapOf(players []Player) map[int]Player {
+	playerMap := map[int]Player{}
+	for _, p := range players {
+		playerMap[p.ID] = p
+	}
+	return playerMap
 }
 
 type Standing struct {
@@ -105,6 +139,64 @@ func schedulePoolMatches(pool []Player) []RoundPair {
 		ids[1] = temp
 	}
 	return matches
+}
+
+type ScheduledMatch struct {
+	Key       string
+	Player1ID int
+	Player2ID int
+	Pool      string
+	Round     int
+}
+
+// computePlayOrder arranges all pool matches into a single play sequence for
+// one table. It greedily picks, for each slot, the match whose players have
+// rested the longest since their previous game (so nobody plays back-to-back
+// when avoidable), breaking ties towards players with fewer games played so
+// far (so playtime stays evenly distributed throughout the tournament).
+func computePlayOrder(matches []ScheduledMatch) []ScheduledMatch {
+	remaining := append([]ScheduledMatch{}, matches...)
+	lastPlayed := map[int]int{}
+	gamesPlayed := map[int]int{}
+	ordered := make([]ScheduledMatch, 0, len(matches))
+
+	for slot := 1; len(remaining) > 0; slot++ {
+		bestIdx := 0
+		bestRest, bestBalance := -1, 0
+		for i, m := range remaining {
+			rest := 1 << 30
+			for _, p := range []int{m.Player1ID, m.Player2ID} {
+				if last, ok := lastPlayed[p]; ok && slot-last < rest {
+					rest = slot - last
+				}
+			}
+			balance := gamesPlayed[m.Player1ID] + gamesPlayed[m.Player2ID]
+			better := false
+			switch {
+			case i == 0:
+				better = true
+			case rest != bestRest:
+				better = rest > bestRest
+			case balance != bestBalance:
+				better = balance < bestBalance
+			case m.Round != remaining[bestIdx].Round:
+				better = m.Round < remaining[bestIdx].Round
+			default:
+				better = m.Key < remaining[bestIdx].Key
+			}
+			if better {
+				bestIdx, bestRest, bestBalance = i, rest, balance
+			}
+		}
+		picked := remaining[bestIdx]
+		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+		ordered = append(ordered, picked)
+		lastPlayed[picked.Player1ID] = slot
+		lastPlayed[picked.Player2ID] = slot
+		gamesPlayed[picked.Player1ID]++
+		gamesPlayed[picked.Player2ID]++
+	}
+	return ordered
 }
 
 func computePoolStandings(players []Player, matches []MatchRecord) (map[string][]Standing, error) {
@@ -202,67 +294,58 @@ func getStandings(db *sql.DB) (StandingsResponse, error) {
 	}
 
 	semifinals := []MatchView{}
-	playerMap := map[int]Player{}
-	for _, p := range players {
-		playerMap[p.ID] = p
-	}
+	playerMap := playerMapOf(players)
 	var finalMatch *MatchView
 	for _, match := range matches {
 		if match.Stage != "semi" {
 			continue
 		}
-		if p1, ok1 := playerMap[match.Player1ID]; ok1 {
-			if p2, ok2 := playerMap[match.Player2ID]; ok2 {
-				semifinals = append(semifinals, MatchView{
-					ID:       match.ID,
-					Player1:  p1,
-					Player2:  p2,
-					Pool:     match.Pool,
-					Stage:    match.Stage,
-					Round:    match.Round,
-					Score1:   match.Score1,
-					Score2:   match.Score2,
-					Finished: match.Finished,
-				})
-			}
+		if view, ok := match.toView(playerMap); ok {
+			semifinals = append(semifinals, view)
 		}
 	}
 	for _, match := range matches {
 		if match.Stage != "final" {
 			continue
 		}
-		if p1, ok1 := playerMap[match.Player1ID]; ok1 {
-			if p2, ok2 := playerMap[match.Player2ID]; ok2 {
-				finalMatch = &MatchView{
-					ID:       match.ID,
-					Player1:  p1,
-					Player2:  p2,
-					Pool:     match.Pool,
-					Stage:    match.Stage,
-					Round:    match.Round,
-					Score1:   match.Score1,
-					Score2:   match.Score2,
-					Finished: match.Finished,
-				}
-				break
-			}
+		if view, ok := match.toView(playerMap); ok {
+			finalMatch = &view
+			break
 		}
 	}
 
 	return StandingsResponse{Pools: pools, Semifinals: semifinals, Final: finalMatch}, nil
 }
 
+// matchStagePriority orders stages by when they are played: pool play first,
+// then semi-finals, then the final.
 func matchStagePriority(stage string) int {
 	switch stage {
-	case "final":
+	case "pool":
 		return 1
 	case "semi":
 		return 2
-	case "pool":
+	case "final":
 		return 3
 	default:
 		return 4
 	}
+}
+
+// sortByPlaySequence orders matches as they should be played: pool stage
+// first (by computed play order), then semis, then the final.
+func sortByPlaySequence(matches []MatchRecord) {
+	sort.SliceStable(matches, func(i, j int) bool {
+		iPri := matchStagePriority(matches[i].Stage)
+		jPri := matchStagePriority(matches[j].Stage)
+		if iPri != jPri {
+			return iPri < jPri
+		}
+		if matches[i].PlayOrder != matches[j].PlayOrder {
+			return matches[i].PlayOrder < matches[j].PlayOrder
+		}
+		return matches[i].Key < matches[j].Key
+	})
 }
 
 func getCurrentGame(db *sql.DB) (*MatchView, error) {
@@ -274,28 +357,12 @@ func getCurrentGame(db *sql.DB) (*MatchView, error) {
 	if err != nil {
 		return nil, err
 	}
-	playerMap := map[int]Player{}
-	for _, p := range players {
-		playerMap[p.ID] = p
-	}
+	playerMap := playerMapOf(players)
 
 	for _, match := range matches {
 		if match.Current {
-			if p1, ok1 := playerMap[match.Player1ID]; ok1 {
-				if p2, ok2 := playerMap[match.Player2ID]; ok2 {
-					return &MatchView{
-						ID:       match.ID,
-						Player1:  p1,
-						Player2:  p2,
-						Pool:     match.Pool,
-						Stage:    match.Stage,
-						Round:    match.Round,
-						Score1:   match.Score1,
-						Score2:   match.Score2,
-						Finished: match.Finished,
-						Current:  true,
-					}, nil
-				}
+			if view, ok := match.toView(playerMap); ok {
+				return &view, nil
 			}
 		}
 	}
@@ -309,33 +376,43 @@ func getCurrentGame(db *sql.DB) (*MatchView, error) {
 	if len(unfinished) == 0 {
 		return nil, nil
 	}
-	sort.SliceStable(unfinished, func(i, j int) bool {
-		iPri := matchStagePriority(unfinished[i].Stage)
-		jPri := matchStagePriority(unfinished[j].Stage)
-		if iPri != jPri {
-			return iPri < jPri
-		}
-		if unfinished[i].Round != unfinished[j].Round {
-			return unfinished[i].Round < unfinished[j].Round
-		}
-		return unfinished[i].Key < unfinished[j].Key
-	})
-	match := unfinished[0]
-	p1, ok1 := playerMap[match.Player1ID]
-	p2, ok2 := playerMap[match.Player2ID]
-	if !ok1 || !ok2 {
+	sortByPlaySequence(unfinished)
+	view, ok := unfinished[0].toView(playerMap)
+	if !ok {
 		return nil, nil
 	}
-	return &MatchView{
-		ID:       match.ID,
-		Player1:  p1,
-		Player2:  p2,
-		Pool:     match.Pool,
-		Stage:    match.Stage,
-		Round:    match.Round,
-		Score1:   match.Score1,
-		Score2:   match.Score2,
-		Finished: match.Finished,
-		Current:  false,
-	}, nil
+	return &view, nil
+}
+
+// getUpNext returns the next unfinished matches in play sequence, excluding
+// the match with excludeID (the one currently being played/displayed).
+func getUpNext(db *sql.DB, limit, excludeID int) ([]MatchView, error) {
+	players, err := getPlayers(db)
+	if err != nil {
+		return nil, err
+	}
+	matches, err := getMatches(db)
+	if err != nil {
+		return nil, err
+	}
+	playerMap := playerMapOf(players)
+
+	unfinished := []MatchRecord{}
+	for _, match := range matches {
+		if !match.Finished && match.ID != excludeID {
+			unfinished = append(unfinished, match)
+		}
+	}
+	sortByPlaySequence(unfinished)
+
+	upNext := []MatchView{}
+	for _, match := range unfinished {
+		if len(upNext) >= limit {
+			break
+		}
+		if view, ok := match.toView(playerMap); ok {
+			upNext = append(upNext, view)
+		}
+	}
+	return upNext, nil
 }

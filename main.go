@@ -81,6 +81,12 @@ func main() {
 	mux.HandleFunc("/api/current-game/score", func(w http.ResponseWriter, r *http.Request) {
 		handleCurrentGameScore(w, r, db)
 	})
+	mux.HandleFunc("/api/current-game/next", func(w http.ResponseWriter, r *http.Request) {
+		handleCurrentGameNext(w, r, db)
+	})
+	mux.HandleFunc("/api/current-game/server", func(w http.ResponseWriter, r *http.Request) {
+		handleCurrentGameServer(w, r, db)
+	})
 	mux.HandleFunc("/live-score", func(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, "static/live-score.html")
 	})
@@ -88,8 +94,12 @@ func main() {
 		serveFile(w, r, "static/admin-live.html")
 	})
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         ":" + port,
 		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
@@ -118,29 +128,46 @@ func handlePlayers(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 }
 
 func handleAddPlayer(w http.ResponseWriter, r *http.Request, db *sql.DB) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
+		var payload struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if payload.Name == "" {
+			http.Error(w, "name is required", http.StatusBadRequest)
+			return
+		}
+		if _, err := addPlayer(db, payload.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		broadcastUpdate()
+		w.WriteHeader(http.StatusCreated)
+	case http.MethodDelete:
+		var payload struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if payload.ID <= 0 {
+			http.Error(w, "invalid player id", http.StatusBadRequest)
+			return
+		}
+		if err := deletePlayer(db, payload.ID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		broadcastUpdate()
+		w.WriteHeader(http.StatusNoContent)
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
-
-	var payload struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	if payload.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
-		return
-	}
-
-	if _, err := addPlayer(db, payload.Name); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	broadcastUpdate()
-	w.WriteHeader(http.StatusCreated)
 }
 
 func handleMatches(w http.ResponseWriter, r *http.Request, db *sql.DB) {
@@ -151,25 +178,17 @@ func handleMatches(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		matches := make([]MatchView, 0, len(matchRows))
-		players, _ := getPlayers(db)
-		playerMap := map[int]Player{}
-		for _, player := range players {
-			playerMap[player.ID] = player
+		players, err := getPlayers(db)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+		playerMap := playerMapOf(players)
+		matches := make([]MatchView, 0, len(matchRows))
 		for _, row := range matchRows {
-			matches = append(matches, MatchView{
-				ID:       row.ID,
-				Player1:  playerMap[row.Player1ID],
-				Player2:  playerMap[row.Player2ID],
-				Pool:     row.Pool,
-				Stage:    row.Stage,
-				Round:    row.Round,
-				Score1:   row.Score1,
-				Score2:   row.Score2,
-				Finished: row.Finished,
-				Current:  row.Current,
-			})
+			if view, ok := row.toView(playerMap); ok {
+				matches = append(matches, view)
+			}
 		}
 		writeJSON(w, matches)
 	case http.MethodPost:
@@ -263,9 +282,88 @@ func handleCurrentGame(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	excludeID := 0
+	if match != nil {
+		excludeID = match.ID
+	}
+	upNext, err := getUpNext(db, 4, excludeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, struct {
-		Match *MatchView `json:"match"`
-	}{Match: match})
+		Match  *MatchView  `json:"match"`
+		UpNext []MatchView `json:"up_next"`
+	}{Match: match, UpNext: upNext})
+}
+
+// handleCurrentGameNext advances the live display to the next unfinished
+// match in the play sequence.
+func handleCurrentGameNext(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	current, err := getCurrentGame(db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	excludeID := 0
+	if current != nil {
+		excludeID = current.ID
+	}
+	upNext, err := getUpNext(db, 1, excludeID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(upNext) == 0 {
+		if err := clearCurrentMatch(db); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else if err := setCurrentMatch(db, upNext[0].ID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	broadcastUpdate()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleCurrentGameServer records which player serves first in the current
+// match so displays can show whose serve it is.
+func handleCurrentGameServer(w http.ResponseWriter, r *http.Request, db *sql.DB) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var payload struct {
+		Server int `json:"server"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if payload.Server != 1 && payload.Server != 2 {
+		http.Error(w, "server must be 1 or 2", http.StatusBadRequest)
+		return
+	}
+	match, err := getCurrentGame(db)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if match == nil {
+		http.Error(w, "no active match", http.StatusBadRequest)
+		return
+	}
+	if err := setFirstServer(db, match.ID, payload.Server); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	broadcastUpdate()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleCurrentGameSelect(w http.ResponseWriter, r *http.Request, db *sql.DB) {
