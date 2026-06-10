@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS matches (
 	if err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
-	return ensureMatchColumns(db)
+	if err := ensureMatchColumns(db); err != nil {
+		return err
+	}
+	return initSessionTables(db)
 }
 
 func ensureMatchColumns(db *sql.DB) error {

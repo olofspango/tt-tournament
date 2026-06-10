@@ -87,6 +87,30 @@ func main() {
 	mux.HandleFunc("/api/current-game/server", func(w http.ResponseWriter, r *http.Request) {
 		handleCurrentGameServer(w, r, db)
 	})
+	mux.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
+		serveFile(w, r, "static/play.html")
+	})
+	mux.HandleFunc("/api/session", func(w http.ResponseWriter, r *http.Request) {
+		handleSession(w, r, db)
+	})
+	mux.HandleFunc("/api/session/new", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionNew(w, r, db)
+	})
+	mux.HandleFunc("/api/session/player", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionPlayer(w, r, db)
+	})
+	mux.HandleFunc("/api/session/game", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionGame(w, r, db)
+	})
+	mux.HandleFunc("/api/session/game/reopen", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionGameReopen(w, r, db)
+	})
+	mux.HandleFunc("/api/session/score", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionScore(w, r, db)
+	})
+	mux.HandleFunc("/api/session/server", func(w http.ResponseWriter, r *http.Request) {
+		handleSessionServer(w, r, db)
+	})
 	mux.HandleFunc("/live-score", func(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, "static/live-score.html")
 	})

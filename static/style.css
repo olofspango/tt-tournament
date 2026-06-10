@@ -859,6 +859,109 @@ body[data-page="live-score"] nav {
     display: none;
 }
 
+/* ===== AD-HOC PLAY ===== */
+.session-player-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.session-player-form button {
+    width: auto;
+}
+
+button.session-button {
+    width: auto;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+}
+
+.player-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+button.player-chip {
+    width: auto;
+    padding: 12px 20px;
+    border-radius: 999px;
+    background: #f8fafc;
+    color: var(--text);
+    border: 2px solid var(--border);
+    box-shadow: none;
+    font-weight: 600;
+}
+
+button.player-chip.selected {
+    background: rgba(37, 99, 235, 0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+button.player-chip:disabled {
+    transform: none;
+}
+
+#start-set {
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+}
+
+.inline-undo {
+    margin-left: 12px;
+    width: auto;
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    vertical-align: middle;
+}
+
+.h2h-list h3 {
+    margin: 20px 0 10px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.h2h-item {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    font-weight: 600;
+}
+
+.h2h-item:last-child {
+    border-bottom: none;
+}
+
+.h2h-item span:first-child {
+    text-align: right;
+}
+
+.h2h-score {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    background: rgba(37, 99, 235, 0.08);
+    border-radius: 999px;
+    padding: 4px 14px;
+}
+
+.h2h-leader {
+    color: #15803d;
+}
+
+button.delete-set {
+    width: auto;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    margin-left: 8px;
+}
+
 /* ===== PAGE FOOTER ===== */
 .page-footer {
     text-align: center;
@@ -940,5 +1043,13 @@ nav a {
 
     .table-container {
         overflow-x: auto;
+    }
+
+    button.player-chip,
+    button.session-button,
+    button.delete-set,
+    .session-player-form button,
+    .inline-undo {
+        width: auto;
     }
 }

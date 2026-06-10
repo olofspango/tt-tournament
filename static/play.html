@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ad-hoc Play</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body data-page="play">
+    <div class="page">
+        <header>
+            <div>
+                <h1>🏓 Ad-hoc Play</h1>
+                <p>Quick 1v1 sets — rotate, score, and keep the lunch-break tally.</p>
+            </div>
+            <nav>
+                <a href="/">Dashboard</a>
+            </nav>
+        </header>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Players</h2>
+                <button id="new-session" class="secondary danger session-button">↺ New session</button>
+            </div>
+            <form id="session-player-form" class="session-player-form">
+                <input type="text" id="session-player-name" placeholder="Add player…" autocomplete="off" />
+                <button type="submit" class="session-button">Add</button>
+            </form>
+            <div id="session-players" class="player-chips"></div>
+            <div id="session-feedback" class="feedback"></div>
+        </section>
+
+        <section class="card" id="set-card">
+            <h2 id="set-card-title">Current Set</h2>
+            <div id="session-set"></div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Session Tally</h2>
+                <span class="section-note" id="session-meta"></span>
+            </div>
+            <div class="table-container">
+                <table id="session-standings-table">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Sets</th>
+                            <th>W</th>
+                            <th>L</th>
+                            <th>Diff</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="session-h2h" class="h2h-list"></div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">
+                <h2>Played Sets</h2>
+            </div>
+            <div id="session-games"></div>
+        </section>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+
+</html>

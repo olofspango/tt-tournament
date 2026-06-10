@@ -17,6 +17,8 @@ A simple Go web application for managing a table tennis tournament.
 - Live score display (`/live-score`) for a wall screen/iPad: huge score,
   serve indicator, match point alert, winner banner and "up next" preview
 - Dashboard (`/`) with standings, live match and the upcoming match queue
+- Ad-hoc play mode (`/play`) for casual lunch-break sets, separate from the
+  tournament
 - Live updates everywhere via WebSockets
 - SQLite storage and Docker-ready deployment
 
@@ -44,6 +46,22 @@ Open:
    automatically and both displays follow.
 5. After the last pool game the semi-finals appear (pool winner vs the other
    pool's runner-up), then the final.
+
+## Ad-hoc play (lunch-break mode)
+
+Open `/play` when a few of you just want to rotate 1v1 sets without a
+tournament:
+
+1. Add the players who are in today (the roster is per session and separate
+   from the tournament roster).
+2. Tap two names — the app pre-selects a suggested pairing based on who has
+   rested the longest — and press **Start set**.
+3. Score with the +/− buttons; a set finishes automatically at 11 points
+   with a 2-point margin. **Undo** reopens the last set if a tap went wrong.
+4. The session tally shows set wins per player and head-to-head results
+   between each pair.
+5. **New session** archives the current tally and starts fresh (optionally
+   keeping the same players).
 
 ## Notes
 

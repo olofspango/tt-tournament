@@ -12,6 +12,8 @@ function refresh() {
         loadLiveScore();
     } else if (pageType === 'admin-live') {
         loadCurrentGame();
+    } else if (pageType === 'play') {
+        loadPlaySession();
     }
 }
 
@@ -351,6 +353,296 @@ function renderLiveScore(match, upNext) {
     container.appendChild(card);
 }
 
+/* ===== ad-hoc play ===== */
+
+const playSelection = new Set();
+
+async function loadPlaySession() {
+    const response = await fetch('/api/session');
+    if (!response.ok) {
+        return;
+    }
+    const state = await response.json();
+    renderPlayPlayers(state);
+    renderPlaySet(state);
+    renderPlayTally(state);
+    renderPlayGames(state);
+}
+
+function playFeedback(message, ok) {
+    const feedback = document.getElementById('session-feedback');
+    feedback.textContent = message || '';
+    feedback.className = ok ? 'feedback success' : 'feedback error';
+    if (message && ok) {
+        setTimeout(() => { feedback.textContent = ''; }, 2500);
+    }
+}
+
+function renderPlayPlayers(state) {
+    const container = document.getElementById('session-players');
+    if (!state.players.length) {
+        container.innerHTML = '<p class="empty">Add the players who are in today — then tap two of them to start a set.</p>';
+        return;
+    }
+    // Keep the selection valid and seed it from the server's suggestion of
+    // who should play next (longest rest, fewest games).
+    const ids = new Set(state.players.map((p) => p.id));
+    playSelection.forEach((id) => { if (!ids.has(id)) playSelection.delete(id); });
+    if (!state.current_game && playSelection.size === 0 && state.suggestion) {
+        playSelection.add(state.suggestion.player1_id);
+        playSelection.add(state.suggestion.player2_id);
+    }
+    container.innerHTML = state.players.map((p) => `
+      <button class="player-chip${playSelection.has(p.id) ? ' selected' : ''}" data-player-id="${p.id}" ${state.current_game ? 'disabled' : ''}>
+        ${esc(p.name)}
+      </button>
+    `).join('');
+    container.querySelectorAll('.player-chip').forEach((chip) => {
+        chip.addEventListener('click', (event) => {
+            const id = Number(event.currentTarget.dataset.playerId);
+            if (playSelection.has(id)) {
+                playSelection.delete(id);
+            } else {
+                if (playSelection.size >= 2) {
+                    // Replace the oldest pick so tapping a third name swaps it in.
+                    playSelection.delete(playSelection.values().next().value);
+                }
+                playSelection.add(id);
+            }
+            loadPlaySession();
+        });
+    });
+}
+
+function renderPlaySet(state) {
+    const container = document.getElementById('session-set');
+    const title = document.getElementById('set-card-title');
+    const game = state.current_game;
+    if (game) {
+        title.textContent = 'Current Set';
+        renderPlayCurrentGame(container, game);
+        return;
+    }
+    title.textContent = 'Next Set';
+    if (state.players.length < 2) {
+        container.innerHTML = '<p class="empty">Need at least two players for a set.</p>';
+        return;
+    }
+    const selected = state.players.filter((p) => playSelection.has(p.id));
+    const lastGame = state.games.length ? state.games[0] : null;
+    const lastWinner = lastGame ? winnerOf(lastGame) : null;
+    container.innerHTML = `
+      ${lastGame && lastWinner ? `
+        <div class="winner-banner">🏆 ${esc(lastWinner.name)} wins ${Math.max(lastGame.score1, lastGame.score2)}–${Math.min(lastGame.score1, lastGame.score2)}
+          <button id="reopen-last-set" class="secondary inline-undo">Undo</button>
+        </div>` : ''}
+      <p class="section-help">${selected.length === 2
+            ? `<strong>${esc(selected[0].name)}</strong> vs <strong>${esc(selected[1].name)}</strong>${suggestionMatchesSelection(state) ? ' (suggested — longest rest)' : ''}`
+            : 'Tap two players above to set the pairing.'}</p>
+      <button id="start-set" ${selected.length === 2 ? '' : 'disabled'}>▶ Start set</button>
+    `;
+    const startButton = document.getElementById('start-set');
+    startButton.addEventListener('click', () => {
+        const pair = state.players.filter((p) => playSelection.has(p.id));
+        if (pair.length === 2) startPlaySet(pair[0].id, pair[1].id);
+    });
+    const reopenButton = document.getElementById('reopen-last-set');
+    if (reopenButton) {
+        reopenButton.addEventListener('click', reopenLastSet);
+    }
+}
+
+function suggestionMatchesSelection(state) {
+    if (!state.suggestion) return false;
+    return playSelection.has(state.suggestion.player1_id) && playSelection.has(state.suggestion.player2_id) && playSelection.size === 2;
+}
+
+function renderPlayCurrentGame(container, game) {
+    const server = currentServerOf(game);
+    const mp = matchPointFor(game);
+    container.innerHTML = `
+      <div class="match-title">${esc(game.player1.name)} vs ${esc(game.player2.name)}</div>
+      <div class="score-board">
+        <div class="player-score${server === 1 ? ' serving' : ''}">
+          <span>${server === 1 ? '🏓 ' : ''}${esc(game.player1.name)}</span>
+          <strong>${game.score1}</strong>
+          <div class="score-controls">
+            <button id="play-p1-decrement" class="secondary">−</button>
+            <button id="play-p1-increment">+</button>
+          </div>
+        </div>
+        <div class="player-score${server === 2 ? ' serving' : ''}">
+          <span>${server === 2 ? '🏓 ' : ''}${esc(game.player2.name)}</span>
+          <strong>${game.score2}</strong>
+          <div class="score-controls">
+            <button id="play-p2-decrement" class="secondary">−</button>
+            <button id="play-p2-increment">+</button>
+          </div>
+        </div>
+      </div>
+      <p class="match-status">${mp ? '🔥 Match point — ' + esc(mp === 1 ? game.player1.name : game.player2.name) : 'Live — first to 11, win by 2'}</p>
+      <div class="serve-select">
+        <span>First server:</span>
+        <button id="play-server-1" class="${game.first_server === 1 ? '' : 'secondary'}">${esc(game.player1.name)}</button>
+        <button id="play-server-2" class="${game.first_server === 2 ? '' : 'secondary'}">${esc(game.player2.name)}</button>
+      </div>
+    `;
+    document.getElementById('play-p1-increment').addEventListener('click', () => updatePlayScore(1, 0));
+    document.getElementById('play-p1-decrement').addEventListener('click', () => updatePlayScore(-1, 0));
+    document.getElementById('play-p2-increment').addEventListener('click', () => updatePlayScore(0, 1));
+    document.getElementById('play-p2-decrement').addEventListener('click', () => updatePlayScore(0, -1));
+    document.getElementById('play-server-1').addEventListener('click', () => setPlayServer(1));
+    document.getElementById('play-server-2').addEventListener('click', () => setPlayServer(2));
+}
+
+function renderPlayTally(state) {
+    const meta = document.getElementById('session-meta');
+    meta.textContent = state.session ? `Session started ${new Date(state.session.started_at).toLocaleString()}` : '';
+    const tbody = document.querySelector('#session-standings-table tbody');
+    tbody.innerHTML = '';
+    state.standings.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+      <td>${esc(row.player.name)}</td>
+      <td>${row.played}</td>
+      <td>${row.wins}</td>
+      <td>${row.losses}</td>
+      <td>${row.diff > 0 ? '+' : ''}${row.diff}</td>
+    `;
+        tbody.appendChild(tr);
+    });
+    const h2h = document.getElementById('session-h2h');
+    if (!state.head_to_head.length) {
+        h2h.innerHTML = '';
+        return;
+    }
+    h2h.innerHTML = '<h3>Head to head</h3>' + state.head_to_head.map((entry) => `
+      <div class="h2h-item">
+        <span class="${entry.wins1 > entry.wins2 ? 'h2h-leader' : ''}">${esc(entry.player1.name)}</span>
+        <span class="h2h-score">${entry.wins1} – ${entry.wins2}</span>
+        <span class="${entry.wins2 > entry.wins1 ? 'h2h-leader' : ''}">${esc(entry.player2.name)}</span>
+      </div>
+    `).join('');
+}
+
+function renderPlayGames(state) {
+    const container = document.getElementById('session-games');
+    if (!state.games.length) {
+        container.innerHTML = '<p class="empty">No sets played yet this session.</p>';
+        return;
+    }
+    container.innerHTML = state.games.map((game, idx) => {
+        const winner = winnerOf(game);
+        return `
+      <div class="up-next-item">
+        <span class="up-next-order">#${state.games.length - idx}</span>
+        <span class="up-next-players">${esc(game.player1.name)} <span class="score">${game.score1}</span> <em>vs</em> <span class="score">${game.score2}</span> ${esc(game.player2.name)}</span>
+        <span class="up-next-meta">${winner ? '🏆 ' + esc(winner.name) : ''}
+          ${idx === 0 && !state.current_game ? `<button class="secondary danger delete-set" data-game-id="${game.id}">✕</button>` : ''}
+        </span>
+      </div>`;
+    }).join('');
+    const deleteButton = container.querySelector('.delete-set');
+    if (deleteButton) {
+        deleteButton.addEventListener('click', async (event) => {
+            const id = Number(event.currentTarget.dataset.gameId);
+            if (!window.confirm('Delete the last set from the tally?')) return;
+            const response = await fetch('/api/session/game', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            if (!response.ok) playFeedback(`Unable to delete set: ${await response.text()}`, false);
+            loadPlaySession();
+        });
+    }
+}
+
+async function addSessionPlayer(event) {
+    event.preventDefault();
+    const input = document.getElementById('session-player-name');
+    const name = input.value.trim();
+    if (!name) {
+        playFeedback('Enter a player name.', false);
+        return;
+    }
+    const response = await fetch('/api/session/player', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+    });
+    if (response.ok) {
+        input.value = '';
+        playFeedback('', true);
+        loadPlaySession();
+        return;
+    }
+    playFeedback(`Unable to add player: ${await response.text()}`, false);
+}
+
+async function startPlaySet(player1Id, player2Id) {
+    const response = await fetch('/api/session/game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player1_id: player1Id, player2_id: player2Id }),
+    });
+    if (response.ok) {
+        playSelection.clear();
+        loadPlaySession();
+        return;
+    }
+    playFeedback(`Unable to start set: ${await response.text()}`, false);
+}
+
+async function updatePlayScore(delta1, delta2) {
+    const response = await fetch('/api/session/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delta1, delta2 }),
+    });
+    if (!response.ok) {
+        playFeedback(`Unable to update score: ${await response.text()}`, false);
+    }
+    loadPlaySession();
+}
+
+async function setPlayServer(server) {
+    const response = await fetch('/api/session/server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ server }),
+    });
+    if (!response.ok) {
+        playFeedback(`Unable to set first server: ${await response.text()}`, false);
+    }
+    loadPlaySession();
+}
+
+async function reopenLastSet() {
+    const response = await fetch('/api/session/game/reopen', { method: 'POST' });
+    if (!response.ok) {
+        playFeedback(`Unable to reopen set: ${await response.text()}`, false);
+    }
+    loadPlaySession();
+}
+
+async function startNewSession() {
+    if (!window.confirm('Start a new session? The current tally will be archived.')) return;
+    const keepPlayers = window.confirm('Keep the same players in the new session?');
+    const response = await fetch('/api/session/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keep_players: keepPlayers }),
+    });
+    if (response.ok) {
+        playSelection.clear();
+        playFeedback('New session started.', true);
+        loadPlaySession();
+        return;
+    }
+    playFeedback(`Unable to start session: ${await response.text()}`, false);
+}
+
 /* ===== admin ===== */
 
 async function loadAdmin() {
@@ -545,5 +837,9 @@ window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('player-form').addEventListener('submit', addPlayer);
         document.getElementById('save-all-scores').addEventListener('click', saveAllScores);
         document.getElementById('reset-tournament').addEventListener('click', resetTournament);
+    }
+    if (pageType === 'play') {
+        document.getElementById('session-player-form').addEventListener('submit', addSessionPlayer);
+        document.getElementById('new-session').addEventListener('click', startNewSession);
     }
 });
